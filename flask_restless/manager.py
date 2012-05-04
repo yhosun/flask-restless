@@ -20,6 +20,7 @@ from collections import namedtuple
 from uuid import uuid1
 import sys
 
+from flask import abort
 from flask import Blueprint
 from flask import url_for as flask_url_for
 
@@ -394,7 +395,8 @@ class APIManager(object):
                              serializer_class=None, deserializer_class=None,
                              includes=None, allow_to_many_replacement=False,
                              allow_delete_from_to_many_relationships=False,
-                             allow_client_generated_ids=False):
+                             allow_client_generated_ids=False,
+                             hide_disallowed_endpoints=False):
         """Creates and returns a ReSTful API interface as a blueprint, but does
         not register it on any :class:`flask.Flask` application.
 
@@ -589,6 +591,14 @@ class APIManager(object):
         this be a UUID. This is ``False`` by default. For more information, see
         :doc:`creating`.
 
+        If `hide_disallowed_endpoints` is ``True``, requests to
+        disallowed methods (that is, methods not specified in
+        `methods`), which would normally yield a :http:status:`405`
+        response, will yield a :http:status:`404` response instead. This
+        option may be used as a simple form of "security through
+        obscurity", by (slightly) hindering users from discovering where
+        an endpoint exists.
+
         """
         # Perform some sanity checks on the provided keyword arguments.
         if only is not None and exclude is not None:
@@ -763,10 +773,16 @@ class APIManager(object):
             blueprint.add_url_rule(eval_endpoint, methods=eval_methods,
                                    view_func=eval_api_view)
 
+        if hide_disallowed_endpoints:
+            @blueprint.errorhandler(405)
+            def return_404(error):
+                abort(404)
+
         # Finally, record that this APIManager instance has created an API for
         # the specified model.
         self.created_apis_for[model] = APIInfo(collection_name, blueprint.name,
                                                serializer, primary_key)
+
         return blueprint
 
     def create_api(self, *args, **kw):

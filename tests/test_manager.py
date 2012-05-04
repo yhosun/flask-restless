@@ -414,6 +414,26 @@ class TestAPIManager(ManagerTestBase):
             response = func('/api/person')
             assert response.status_code == 405
 
+    def test_hide_disallowed_endpoints(self):
+        """Tests that the `hide_disallowed_endpoints` correctly hides
+        endpoints that would normally return a :http:status:`405` with a
+        :http:status:`404`.
+
+        """
+        self.manager.create_api(self.Person, hide_disallowed_endpoints=True)
+
+        response = self.app.get('/api/person')
+        assert response.status_code != 404
+
+        response = self.app.post('/api/person')
+        assert response.status_code == 404
+        response = self.app.patch('/api/person/1')
+        assert response.status_code == 404
+        response = self.app.delete('/api/person/1')
+        assert response.status_code == 404
+        response = self.app.put('/api/person/1')
+        assert response.status_code == 404
+
     def test_missing_id(self):
         """Tests that calling :meth:`APIManager.create_api` on a model without
         an ``id`` column raises an exception.
