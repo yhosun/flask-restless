@@ -14,6 +14,8 @@ import uuid
 
 from nose.tools import assert_raises
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Query
+from sqlalchemy import Column, Integer, Unicode
 
 from flask.ext.restless.helpers import evaluate_functions
 from flask.ext.restless.helpers import get_columns
@@ -22,9 +24,48 @@ from flask.ext.restless.helpers import partition
 from flask.ext.restless.helpers import primary_key_name
 from flask.ext.restless.helpers import to_dict
 from flask.ext.restless.helpers import upper_keys
+from flask.ext.restless.helpers import session_query
 
 from .helpers import TestSupport
 from .helpers import TestSupportPrefilled
+from .helpers import DatabaseTestBase
+
+
+class TestSessionQuery(DatabaseTestBase):
+    """Unit test for the session_query function"""
+
+    def setUp(self):
+        """Creates example tables to test the various behaviours of session_query()
+
+        """
+        super(TestSessionQuery, self).setUp()
+
+
+
+        #declare models
+        class WithCallable(self.Base):
+            __tablename__ = 'with_callable'
+            id = Column(Integer, primary_key=True)
+            name = Column(Unicode, unique=True)
+
+            @classmethod
+            def query(model):
+              return WithCallable
+
+        class WithoutCallable(self.Base):
+            __tablename__ = 'without_callable'
+            id = Column(Integer, primary_key=True)
+            name = Column(Unicode, unique=True)
+
+        self.WithCallable = WithCallable
+        self.WithoutCallable = WithoutCallable
+
+
+    def test_with_callable(self):
+        assert session_query(self.session, self.WithCallable) == self.WithCallable
+
+    def test_without_callable(self):
+        assert type(session_query(self.session, self.WithoutCallable)) == Query
 
 
 class TestHelpers(object):
