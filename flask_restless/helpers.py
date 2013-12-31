@@ -434,7 +434,7 @@ def query_by_primary_key(session, model, primary_key_value):
     # force unicode primary key name to string; see unicode_keys_to_strings
     pk_name = str(primary_key_name(model))
     query = session_query(session, model)
-    return query.filter_by(**{pk_name: primary_key_value})
+    return query.filter(getattr(model, pk_name) == primary_key_value)
 
 
 def get_by(session, model, primary_key_value):
