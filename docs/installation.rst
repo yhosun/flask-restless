@@ -13,7 +13,7 @@ currently include versions 2.6, 2.7, 3.3, and 3.4.
 Flask-Restless has the following dependencies (which will be automatically
 installed if you use ``pip``):
 
-* `Flask`_ version 0.10 or greater
+* `Flask`_ version 1.0 or greater
 * `SQLAlchemy`_ version 0.8 or greater
 * `mimerender`_ version 0.5.2 or greater
 * `python-dateutil`_ version strictly greater than 2.2
