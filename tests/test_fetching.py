@@ -23,6 +23,7 @@ from operator import itemgetter
 from unittest2 import skip
 
 from sqlalchemy import Column
+from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import Unicode
@@ -1627,6 +1628,144 @@ class TestAssociationProxy(ManagerTestBase):
         document = loads(response.data)
         article = document['data']
         assert ['bar', 'foo'] == sorted(article['attributes']['tag_names'])
+
+
+# TODO Still need to test fetching relation, and related resource, as
+# well as creating, updating, and deleting.
+class TestSingleTableInheritance(ManagerTestBase):
+    """Tests for APIs created for polymorphic models defined using
+    single table inheritance.
+
+    """
+
+    def setUp(self):
+        super(TestSingleTableInheritance, self).setUp()
+
+        class Employee(self.Base):
+            __tablename__ = 'employee'
+            id = Column(Integer, primary_key=True)
+            type = Column(Enum('employee', 'manager'), nullable=False)
+            __mapper_args__ = {
+                'polymorphic_on': type,
+                'polymorphic_identity': 'employee'
+            }
+
+        # This model inherits directly from the `Employee` class, so
+        # there is only one table here.
+        class Manager(Employee):
+            __mapper_args__ = {
+                'polymorphic_identity': 'manager'
+            }
+
+        self.Employee = Employee
+        self.Manager = Manager
+        self.Base.metadata.create_all()
+        self.manager.create_api(Employee)
+        self.manager.create_api(Manager)
+
+    def test_collection(self):
+        """Tests for fetching a single resource from APIs for models
+        created using single table inheritance.
+
+        """
+        employee = self.Employee(id=1)
+        manager = self.Manager(id=2)
+        self.session.add_all([employee, manager])
+        self.session.commit()
+
+        # Check that both employees and managers are visible at /api/employee.
+        response = self.app.get('/api/employee')
+        assert response.status_code == 200
+        document = loads(response.data)
+        employees = document['data']
+        employees = sorted(employees, key=itemgetter('id'))
+        employee_types = list(map(itemgetter('type'), employees))
+        employee_ids = list(map(itemgetter('id'), employees))
+        assert ['employee', 'manager'] == employee_types
+        assert ['1', '2'] == employee_ids
+
+        # Check that only the managers are visible at /api/manager.
+        response = self.app.get('/api/manager')
+        assert response.status_code == 200
+        document = loads(response.data)
+        managers = document['data']
+        managers = sorted(managers, key=itemgetter('id'))
+        manager_types = list(map(itemgetter('type'), managers))
+        manager_ids = list(map(itemgetter('id'), managers))
+        assert ['manager'] == manager_types
+        assert ['2'] == manager_ids
+
+    def test_resource(self):
+        """Tests for fetching a single resource from APIs for models
+        created using single table inheritance.
+
+        """
+        employee = self.Employee(id=1)
+        manager = self.Manager(id=2)
+        self.session.add_all([employee, manager])
+        self.session.commit()
+
+        # Check that the employee is visible at /api/employee but not at
+        # /api/manager.
+        response = self.app.get('/api/manager/1')
+        assert response.status_code == 404
+        response = self.app.get('/api/employee/1')
+        assert response.status_code == 200
+        document = loads(response.data)
+        resource = document['data']
+        assert resource['type'] == 'employee'
+        assert resource['id'] == str(employee.id)
+
+        # Check that the manager is visible at /api/manager but not at
+        # /api/employee.
+        response = self.app.get('/api/employee/2')
+        assert response.status_code == 404
+        response = self.app.get('/api/manager/2')
+        assert response.status_code == 200
+        document = loads(response.data)
+        resource = document['data']
+        assert resource['type'] == 'manager'
+        assert resource['id'] == str(manager.id)
+
+    def test_heterogeneous_serialization(self):
+        """Tests that each object is serialized using the serializer
+        specified in :meth:`APIManager.create_api`.
+
+        """
+        employee = self.Employee(id=1)
+        manager = self.Manager(id=2)
+        self.session.add_all([employee, manager])
+        self.session.commit()
+
+        class EmployeeSerializer(DefaultSerializer):
+
+            def serialize(self, instance, *args, **kw):
+                superserialize = super(EmployeeSerializer, self).serialize
+                result = superserialize(instance, *args, **kw)
+                result['data']['attributes']['foo'] = 'bar'
+                return result
+
+        class ManagerSerializer(DefaultSerializer):
+
+            def serialize(self, instance, *args, **kw):
+                superserialize = super(ManagerSerializer, self).serialize
+                result = superserialize(instance, *args, **kw)
+                result['data']['attributes']['baz'] = 'xyzzy'
+                return result
+
+        self.manager.create_api(self.Employee, url_prefix='/api2',
+                                serializer_class=EmployeeSerializer)
+        self.manager.create_api(self.Manager, url_prefix='/api2',
+                                serializer_class=ManagerSerializer)
+
+        response = self.app.get('/api/employee')
+        assert response.status_code == 200
+        document = loads(response.data)
+        employees = document['data']
+        assert len(employees) == 2
+        employees = sorted(employees, key=itemgetter('id'))
+        assert employees[0]['attributes']['foo'] == 'bar'
+        assert employees[1]['attributes']['baz'] == 'xyzzy'
 
 
 class TestFlaskSQLAlchemy(FlaskSQLAlchemyTestBase):
