@@ -27,6 +27,7 @@ import dateutil
 from sqlalchemy import Column
 from sqlalchemy import Date
 from sqlalchemy import DateTime
+from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import Interval
@@ -1020,6 +1021,106 @@ class TestAssociationProxy(ManagerTestBase):
 
         """
         assert False, 'Not implemented'
+
+
+class TestSingleTableInheritance(ManagerTestBase):
+    """Tests for APIs created for polymorphic models defined using
+    single table inheritance.
+
+    """
+
+    def setUp(self):
+        super(TestSingleTableInheritance, self).setUp()
+
+        class Employee(self.Base):
+            __tablename__ = 'employee'
+            id = Column(Integer, primary_key=True)
+            type = Column(Enum('employee', 'manager'), nullable=False)
+            __mapper_args__ = {
+                'polymorphic_on': type,
+                'polymorphic_identity': 'employee'
+            }
+
+        # This model inherits directly from the `Employee` class, so
+        # there is only one table here.
+        class Manager(Employee):
+            __mapper_args__ = {
+                'polymorphic_identity': 'manager'
+            }
+
+        self.Employee = Employee
+        self.Manager = Manager
+        self.Base.metadata.create_all()
+        self.manager.create_api(Employee, methods=['POST'])
+        self.manager.create_api(Manager, methods=['POST'])
+
+    def test_subclass_at_subclass(self):
+        """Tests for creating a resource of the subclass type at the URL
+        for the subclass.
+
+        """
+        data = {
+            'data': {
+                'type': 'manager'
+            }
+        }
+        response = self.app.post('/api/manager', data=dumps(data))
+        assert response.status_code == 201
+        document = loads(response.data)
+        manager = document['data']
+        manager_in_db = self.session.query(self.Manager).first()
+        assert manager['id'] == str(manager_in_db.id)
+        assert manager['type'] == 'manager'
+
+    def test_subclass_at_superclass(self):
+        """Tests for creating a resource of the subclass type at the URL
+        for the superclass.
+
+        """
+        data = {
+            'data': {
+                'type': 'manager'
+            }
+        }
+        response = self.app.post('/api/employee', data=dumps(data))
+        assert response.status_code == 201
+        document = loads(response.data)
+        manager = document['data']
+        manager_in_db = self.session.query(self.Manager).first()
+        assert manager['id'] == str(manager_in_db.id)
+        assert manager['type'] == 'manager'
+
+    def test_superclass_at_superclass(self):
+        """Tests for creating a resource of the superclass type at the
+        URL for the superclass.
+
+        """
+        data = {
+            'data': {
+                'type': 'employee'
+            }
+        }
+        response = self.app.post('/api/employee', data=dumps(data))
+        assert response.status_code == 201
+        document = loads(response.data)
+        employee = document['data']
+        employee_in_db = self.session.query(self.Employee).first()
+        assert employee['id'] == str(employee_in_db.id)
+        assert employee['type'] == 'employee'
+
+    def test_superclass_at_subclass(self):
+        """Tests that attempting to create a resource of the superclass
+        type at the URL for the subclass causes an error.
+
+        """
+        data = {
+            'data': {
+                'type': 'employee'
+            }
+        }
+        response = self.app.post('/api/manager', data=dumps(data))
+        check_sole_error(response, 409, ['Failed', 'deserialize', 'expected',
+                                         'type', 'manager', 'employee'])
 
 
 class TestFlaskSQLAlchemy(FlaskSQLAlchemyTestBase):
