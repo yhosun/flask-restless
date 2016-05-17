@@ -17,6 +17,7 @@ from dateutil.parser import parse as parse_datetime
 from sqlalchemy import Date
 from sqlalchemy import DateTime
 from sqlalchemy import Interval
+from sqlalchemy import BigInteger
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.associationproxy import AssociationProxy
@@ -333,8 +334,21 @@ def to_dict(instance, deep=None, exclude=None, include=None,
     elif include is not None:
         columns = (c for c in columns if c in include)
     # create a dictionary mapping column name to value
-    result = dict((col, getattr(instance, col)) for col in columns
-                  if not (col.startswith('__') or col in COLUMN_BLACKLIST))
+    ################################################################################
+    # PATCHED to convert BigInteger to String for Javascript client
+    ################################################################################	
+    result = {}
+    for col in columns:
+        if not (col.startswith('__') or col in COLUMN_BLACKLIST):
+            value = getattr(instance, col)
+            inspected_col = inspected_instance.columns.get(col)
+            if inspected_col is not None and isinstance(inspected_col.type, BigInteger):
+                value = str(value)
+            result[col] = value
+
+    #result = dict((col, getattr(instance, col)) for col in columns
+    #              if not (col.startswith('__') or col in COLUMN_BLACKLIST))
+    ###############################################################################
     # add any included methods
     if include_methods is not None:
         for method in include_methods:
