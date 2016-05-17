@@ -411,7 +411,8 @@ class API(APIBase):
         instance = get_by(self.session, self.model, resource_id,
                           self.primary_key)
         if instance is None:
-            detail = 'No resource found with ID {0}'.format(resource_id)
+            detail = 'No resource found with type {0} and ID {1}'
+            detail = detail.format(collection_name(self.model), resource_id)
             return error_response(404, detail=detail)
         self.session.delete(instance)
         was_deleted = len(self.session.deleted) > 0

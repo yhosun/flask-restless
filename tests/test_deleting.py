@@ -21,6 +21,7 @@ specification.
 from unittest2 import skip
 
 from sqlalchemy import Column
+from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import Unicode
@@ -29,6 +30,7 @@ from sqlalchemy.orm import relationship
 from flask.ext.restless import APIManager
 from flask.ext.restless import ProcessingException
 
+from .helpers import check_sole_error
 from .helpers import dumps
 from .helpers import loads
 from .helpers import FlaskSQLAlchemyTestBase
@@ -265,6 +267,91 @@ class TestProcessors(ManagerTestBase):
                                 postprocessors=postprocessors)
         response = self.app.delete('/api/person/1')
         assert response.status_code == 204
+
+
+class TestSingleTableInheritance(ManagerTestBase):
+    """Tests for APIs created for polymorphic models defined using
+    single table inheritance.
+
+    """
+
+    def setUp(self):
+        super(TestSingleTableInheritance, self).setUp()
+
+        class Employee(self.Base):
+            __tablename__ = 'employee'
+            id = Column(Integer, primary_key=True)
+            type = Column(Enum('employee', 'manager'), nullable=False)
+            __mapper_args__ = {
+                'polymorphic_on': type,
+                'polymorphic_identity': 'employee'
+            }
+
+        # This model inherits directly from the `Employee` class, so
+        # there is only one table here.
+        class Manager(Employee):
+            __mapper_args__ = {
+                'polymorphic_identity': 'manager'
+            }
+
+        self.Employee = Employee
+        self.Manager = Manager
+        self.Base.metadata.create_all()
+        self.manager.create_api(Employee, methods=['DELETE'])
+        self.manager.create_api(Manager, methods=['DELETE'])
+
+    def test_subclass_at_subclass(self):
+        """Tests for deleting a resource of the subclass type at the URL
+        for the subclass.
+
+        """
+        manager = self.Manager(id=1)
+        self.session.add(manager)
+        self.session.commit()
+        response = self.app.delete('/api/manager/1')
+        assert response.status_code == 204
+        assert self.session.query(self.Manager).count() == 0
+        assert self.session.query(self.Employee).count() == 0
+
+    def test_subclass_at_superclass(self):
+        """Tests for deleting a resource of the subclass type at the URL
+        for the superclass.
+
+        """
+        manager = self.Manager(id=1)
+        self.session.add(manager)
+        self.session.commit()
+        response = self.app.delete('/api/employee/1')
+        assert response.status_code == 204
+        assert self.session.query(self.Manager).count() == 0
+        assert self.session.query(self.Employee).count() == 0
+
+    def test_superclass_at_superclass(self):
+        """Tests for deleting a resource of the superclass type at the
+        URL for the superclass.
+
+        """
+        employee = self.Employee(id=1)
+        self.session.add(employee)
+        self.session.commit()
+        response = self.app.delete('/api/employee/1')
+        assert response.status_code == 204
+        assert self.session.query(self.Manager).count() == 0
+        assert self.session.query(self.Employee).count() == 0
+
+    def test_superclass_at_subclass(self):
+        """Tests that attempting to delete a resource of the superclass
+        type at the URL for the subclass causes an error.
+
+        """
+        employee = self.Employee(id=1)
+        self.session.add(employee)
+        self.session.commit()
+        response = self.app.delete('/api/manager/1')
+        check_sole_error(response, 404, ['No resource found', 'type',
+                                         'manager', 'ID', '1'])
+        assert self.session.query(self.Manager).count() == 0
+        assert self.session.query(self.Employee).first() is employee
 
 
 class TestFlaskSQLAlchemy(FlaskSQLAlchemyTestBase):
