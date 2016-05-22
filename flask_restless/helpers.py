@@ -342,7 +342,7 @@ def to_dict(instance, deep=None, exclude=None, include=None,
         if not (col.startswith('__') or col in COLUMN_BLACKLIST):
             value = getattr(instance, col)
             inspected_col = inspected_instance.columns.get(col)
-            if inspected_col is not None and isinstance(inspected_col.type, BigInteger):
+            if inspected_col is not None and value is not None and isinstance(inspected_col.type, BigInteger):
                 value = str(value)
             result[col] = value
 
