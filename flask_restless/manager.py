@@ -599,9 +599,10 @@ class APIManager(object):
         if only is not None and exclude is not None:
             msg = 'Cannot simultaneously specify both `only` and `exclude`'
             raise IllegalArgumentError(msg)
-        if not hasattr(model, 'id'):
-            msg = 'Provided model must have an `id` attribute'
-            raise IllegalArgumentError(msg)
+        # PATCH - did not consider primary_key value 
+        #if not hasattr(model, 'id'):
+        #    msg = 'Provided model must have an `id` attribute'
+        #    raise IllegalArgumentError(msg)
         if collection_name == '':
             msg = 'Collection name must be nonempty'
             raise IllegalArgumentError(msg)
